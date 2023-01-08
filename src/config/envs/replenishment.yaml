@@ -1,0 +1,25 @@
+env: "replenishment"
+
+env_args:
+  key: "replenishment_efficient_env-v0"
+  map_name: "n1000c8000d1"
+  time_limit: 1460
+  n_agents: 50
+  task_type: "Standard"
+
+test_greedy: True
+test_nepisode: 10 #10
+test_interval: 100
+log_interval: 100
+runner_log_interval: 100
+learner_log_interval: 100
+visualize: False
+visualize_interval: 5000 # Visualize performance
+
+train_with_joint_data: True
+n_decoupled_iterations: 1
+max_individual_envs: 1
+fake_dynamics_prob: 0.0
+select_ls_randomly: True
+use_zero_like_context : False
+aug_type: 'noise'

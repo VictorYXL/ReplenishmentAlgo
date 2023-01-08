@@ -1,0 +1,46 @@
+
+# --- CD-PPO specific parameters ---
+
+action_selector: "multinomial"
+epsilon_start: .0
+epsilon_finish: .0
+epsilon_anneal_time: 100000
+mask_before_softmax: True
+
+runner: "parallel"
+
+buffer_size: 10
+batch_size_run: 10
+batch_size: 10
+# accumulated_episodes: 8
+
+mac: 'mappo_mac'
+agent: 'n_rnn'
+actor_input_seq_str: 'o_la'
+
+lr: 0.0005
+critic_coef: 0.5
+entropy_coef: 0.001
+reg_coef: 0.01
+gae_lambda: 0.95
+mini_epochs: 4
+eps_clip: 0.2
+save_probs: True
+
+agent_output_type: "pi_logits"
+learner: "cdppo_learner"
+critic_type: "mappo_rnn_critic"
+critic_input_seq_str: 'o_la^i'
+
+use_layer_norm: True
+use_orthogonal: True
+gain: 0.01
+use_value_norm: True
+
+name: "ippo_mtr"
+train_with_joint_data: True
+use_individual_rewards: False
+use_mean_team_reward: True
+n_decoupled_iterations: 0
+
+run: "cdppo_run"
