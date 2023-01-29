@@ -1,55 +1,51 @@
-FROM pytorch/pytorch:1.7.1-cuda11.0-cudnn8-devel
-################################
-# Install apt-get Requirements #
-################################
-ENV LANG C.UTF-8
-ENV APT_INSTALL="apt-get install -y --no-install-recommends"
-ENV PIP_INSTALL="python -m pip --no-cache-dir install --upgrade --default-timeout 100"
-RUN rm -rf /var/lib/apt/lists/* \
-    /etc/apt/sources.list.d/cuda.list \
-    /etc/apt/sources.list.d/nvidia-ml.list && \
-    apt-get update && \
-    DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
-    apt-utils build-essential ca-certificates dpkg-dev pkg-config software-properties-common \
-    cifs-utils openssh-server nfs-common net-tools iputils-ping iproute2 locales htop tzdata \
-    tar wget git swig vim curl tmux zip unzip rar unrar sudo zsh cmake \
-    libgl1-mesa-dev libgl1-mesa-glx libglew-dev libosmesa6-dev libglfw3 libgl1-mesa-glx libncurses5-dev libncursesw5-dev
+FROM nvidia/cuda:9.2-cudnn7-devel-ubuntu16.04
+MAINTAINER Tabish Rashid
 
-################
-# Set Timezone #
-################
-RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
-    locale-gen en_US.UTF-8 && \
-    dpkg-reconfigure --frontend=noninteractive locales && \
-    update-locale LANG=en_US.UTF-8 && \
-    echo "Asia/Shanghai" > /etc/timezone && \
-    rm -f /etc/localtime && \
-    rm -rf /usr/share/zoneinfo/UTC && \
-    dpkg-reconfigure --frontend=noninteractive tzdata
+# CUDA includes
+ENV CUDA_PATH /usr/local/cuda
+ENV CUDA_INCLUDE_PATH /usr/local/cuda/include
+ENV CUDA_LIBRARY_PATH /usr/local/cuda/lib64
 
-#########
-# NVTOP #
-#########
-RUN apt-get install libudev-dev libsystemd-dev -y
-RUN git clone https://github.com/Syllo/nvtop.git && \
-    mkdir -p nvtop/build && cd nvtop/build && \
-    cmake .. && \
-    make && \
-    sudo make install
+# Ubuntu Packages
+RUN apt-get update -y && apt-get install software-properties-common -y && \
+    add-apt-repository -y multiverse && apt-get update -y && apt-get upgrade -y && \
+    apt-get install -y apt-utils nano vim man build-essential wget sudo && \
+    rm -rf /var/lib/apt/lists/*
 
-###################
-# python packages #
-###################
-RUN conda install ruamel.yaml flake8 yapf -y
-RUN ${PIP_INSTALL} tqdm wandb hydra-core tensorflow-gpu opencv-python gym ray[all] \
-    networkx matplotlib multipledispatch tensorboardX pillow scipy seaborn dm-tree \
-    git+https://github.com/oxwhirl/smac.git tensorboard-logger sacred numpy==1.20.3 \
-    Jinja2==3.1.2 pyecharts==1.9.1
+# Install curl and other dependencies
+RUN apt-get update -y && apt-get install -y curl libssl-dev openssl libopenblas-dev \
+    libhdf5-dev hdf5-helpers hdf5-tools libhdf5-serial-dev libprotobuf-dev protobuf-compiler git
+RUN curl -sk https://raw.githubusercontent.com/torch/distro/master/install-deps | bash && \
+    rm -rf /var/lib/apt/lists/*
 
-##################
-# Apt auto clean #
-##################
-RUN ldconfig && \
-    apt-get clean && \
-    apt-get autoremove && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /root/.cache/pip 
+# Install python3 pip3
+RUN apt-get update
+RUN apt-get -y install python3
+RUN apt-get -y install python3-pip
+RUN pip3 install --upgrade pip
+
+# Python packages we use (or used at one point...)
+RUN pip3 install numpy scipy pyyaml matplotlib
+RUN pip3 install imageio
+RUN pip3 install tensorboard-logger
+RUN pip3 install pygame
+
+RUN mkdir /install
+WORKDIR /install
+
+RUN pip3 install jsonpickle==0.9.6
+# install Sacred (from OxWhirl fork)
+RUN pip3 install setuptools
+RUN git clone https://github.com/oxwhirl/sacred.git /install/sacred && cd /install/sacred && python3 setup.py install
+
+#### -------------------------------------------------------------------
+#### install pytorch
+#### -------------------------------------------------------------------
+RUN pip3 install torch
+RUN pip3 install torchvision snakeviz pytest probscale
+
+## -- SMAC
+RUN pip3 install git+https://github.com/oxwhirl/smac.git
+ENV SC2PATH /pymarl/3rdparty/StarCraftII
+
+WORKDIR /pymarl

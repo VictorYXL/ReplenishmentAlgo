@@ -6,15 +6,15 @@ from utils.input_utils import build_critic_inputs, get_critic_input_shape
 from utils.th_utils import orthogonal_init_
 
 
-class MAPPORNNCritic(nn.Module):
+class MAPPORNNCriticShare(nn.Module):
     def __init__(self, scheme, args):
-        super(MAPPORNNCritic, self).__init__()
+        super(MAPPORNNCriticShare, self).__init__()
 
         self.args = args
         self.n_actions = args.n_actions
         self.n_agents = args.n_agents
         self.input_seq_str = (
-            f"{args.critic_input_seq_str}_{self.n_agents}_{self.n_actions}_{0}"
+            f"{args.critic_input_seq_str}_{self.n_agents}_{self.n_actions}_{1}"
         )
 
         input_shape = get_critic_input_shape(self.input_seq_str, scheme)
@@ -37,7 +37,7 @@ class MAPPORNNCritic(nn.Module):
     def init_hidden(self, batch_size):
         hidden_states = self.fc1.weight.new(1, self.args.hidden_dim).zero_()
         self.hidden_states = hidden_states.unsqueeze(0).expand(
-            batch_size, self.n_agents, -1
+            batch_size, 1, -1
         )  # bav
 
     def forward(self, batch, t):
@@ -49,5 +49,5 @@ class MAPPORNNCritic(nn.Module):
             q = self.fc2(self.layer_norm(hh))
         else:
             q = self.fc2(hh)
-        self.hidden_states = hh.view(bs, self.n_agents, -1)
-        return q.view(bs, self.n_agents, -1)
+        self.hidden_states = hh.view(bs, 1, -1)
+        return q.view(bs, 1, -1).expand(bs, self.n_agents, 1)

@@ -132,7 +132,7 @@ class PPOLearner:
             pi = []
             self.mac.init_hidden(batch.batch_size)
             for t in range(batch.max_seq_length - 1):
-                agent_outs = self.mac.forward(batch, t=t, t_env=t_env)
+                agent_outs = self.mac.forward(batch, t=t)
                 pi.append(agent_outs)
             pi = torch.stack(pi, dim=1)  # Concat over time
 

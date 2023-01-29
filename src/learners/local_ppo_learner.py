@@ -37,14 +37,6 @@ class LocalPPOLearner:
 
     def train(self, batch: EpisodeBatch, t_env: int, episode_num: int):
         # Get the relevant quantities
-        # rewards = batch["reward"][:, :-1]
-        # print(rewards.shape)
-        # if self.args.use_individual_rewards:
-        #     rewards = batch["individual_rewards"][:, :-1]
-        #     print(rewards.shape)
-        # exit()
-        # self.args.entropy_coef = max(0.01 - t_env/2000000 * 0.01, 0)
-
         if self.args.use_individual_rewards:
             rewards = batch["individual_rewards"][:, :-1].to(batch.device)
         else:
@@ -85,9 +77,6 @@ class LocalPPOLearner:
                     value_shape
                 )
             else:
-                # rewards = (rewards - rewards.mean()) / \
-                #     (rewards.std() + 1e-6) 
-                # values = (old_values - old_values.mean(1, keepdim=True)) / (old_values.std(1, keepdim=True) + 1e-6)
                 values = old_values
             
             advantages, targets = build_gae_targets(
@@ -97,15 +86,6 @@ class LocalPPOLearner:
                 self.args.gamma,
                 self.args.gae_lambda,
             )
-
-            # if self.use_value_norm:
-            #     targets_shape = targets.shape
-            #     targets = targets.reshape(-1)
-            #     self.value_norm.update(targets)
-            #     targets = self.value_norm.normalize(targets).view(targets_shape)
-        
-        # normed_advantages = (advantages - advantages.mean(1, keepdim=True)) / \
-        #     (advantages.std(1, keepdim=True) + 1e-6)
 
         normed_advantages = (advantages - advantages.mean()) / \
             (advantages.std() + 1e-6)

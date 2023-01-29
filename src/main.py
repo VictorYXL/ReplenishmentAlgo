@@ -126,10 +126,11 @@ if __name__ == "__main__":
         params, "env_args.map_name", config_dict["env_args"]["map_name"]
     )
     algo_name = parse_command(params, "name", config_dict["name"])
-    file_obs_path = join(results_path, "sacred", map_name, algo_name + "_single_")
+    file_obs_path = join(results_path, "sacred", map_name, algo_name)
 
     logger.info("Saving to FileStorageObserver in {}.".format(file_obs_path))
     ex.observers.append(FileStorageObserver.create(file_obs_path))
+
     ex.run_commandline(params)
 
     # flush

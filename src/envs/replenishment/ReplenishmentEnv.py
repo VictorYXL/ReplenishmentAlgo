@@ -1,24 +1,12 @@
 import re
-
 import gym
 import numpy as np
+import datetime
 from gym import ObservationWrapper, spaces
 from gym.spaces import flatdim
 from gym.wrappers import TimeLimit as GymTimeLimit
-
-import sys
-import os
-env_dir = os.path.join(os.path.split(os.path.realpath(__file__))[0], "..", "..", "..")
-sys.path.insert(0, env_dir)
-sys.path.append("..")
 from ..multiagentenv import MultiAgentEnv
-
-# import os
-# env_dir = os.path.join(os.path.split(os.path.realpath(__file__))[0], "..")
-# print(env_dir, os.path.split(os.path.realpath(__file__))[0])
-# sys.path.insert(0, env_dir)
-from ReplenishmentEnv.ReplenishmentEnv import make_env
-import datetime
+from ReplenishmentEnv import make_env
 
 class TimeLimit(GymTimeLimit):
     def __init__(self, env, max_episode_steps=None):
@@ -41,14 +29,15 @@ class TimeLimit(GymTimeLimit):
             done = len(observation) * [True]
         return observation, reward, done, info
 
+
 class FlattenObservation(ObservationWrapper):
     r"""Observation wrapper that flattens the observation of individual agents."""
 
     def __init__(self, env):
         super(FlattenObservation, self).__init__(env)
+        self._env = env
 
         ma_spaces = []
-        self._env = env
 
         for sa_obs in env.observation_space:
             flatdim = spaces.flatdim(sa_obs)
@@ -75,7 +64,6 @@ class FlattenObservation(ObservationWrapper):
     def step(self, actions):
         return self._env.step(actions)
 
-
 class ReplenishmentEnv(MultiAgentEnv):
     def __init__(
         self,
@@ -87,25 +75,10 @@ class ReplenishmentEnv(MultiAgentEnv):
         time_limit=1460,
         **kwargs,
     ):  
-        # n_agents = int(re.findall(r"n(.*)c", map_name)[0])
-        # max_capacity = int(re.findall(r"c(.*)d", map_name)[0])
-        # hist_len = int(re.findall(r"d(.*)s", map_name)[0])
-        # relative_start_day = re.findall(r"s(.*)l", map_name)[0]
-        # sampler_seq_len = int(re.findall(r"l(.*)", map_name)[0]) 
-        
-        # relative_start_day=int(relative_start_day) if relative_start_day != "*" else 0
-        # sampler_seq_len = sampler_seq_len if relative_start_day != "*" else 300
-        # env_base = make_env("sku{}.{}".format(n_agents, task_type), wrapper_name = "ObservationWrapper4OldCode", mode = mode)
-
-        #env_base = make_env("sku50.Standard", wrapper_name = "ObservationWrapper4OldCode", mode = mode)
-        env_base = make_env("sku50.SingleStore.Standard", wrapper_name = "ObservationWrapper", mode = mode)
-
+        env_base = make_env("sku{}.{}".format(n_agents, task_type), wrapper_names = ["ObservationWrapper4OldCode", "FlattenWrapper"], 
+                            mode = mode)
         sampler_seq_len = env_base.config['env']['horizon']
         self.episode_limit = min(time_limit, sampler_seq_len)
-        # start_date_config = datetime.datetime.strptime(env_base.config['env']['start_date'], "%Y/%m/%d")
-        # start_date = start_date_config + datetime.timedelta(days = int(relative_start_day))
-        # end_date = start_date + datetime.timedelta(days = int(sampler_seq_len))
-
         action_space = [0.00, 0.16, 0.33, 0.40, 0.45, 0.50, 0.55, 0.60, 0.66, 0.83, 
                         1.00, 1.16, 1.33, 1.50, 1.66, 1.83, 2.00, 2.16, 2.33, 2.50, 
                         2.66, 2.83, 3.00, 3.16, 3.33, 3.50, 3.66, 3.83, 4.00, 5.00, 
@@ -114,26 +87,15 @@ class ReplenishmentEnv(MultiAgentEnv):
                             "action" : {"mode": "demand_mean_discrete",
                                         "space": action_space}
                         } 
-        env_base.reset(update_config = update_config)
+        env_base.reset(update_config=update_config)
 
         self._env = TimeLimit(
-            # gym.make(
-            #     f"{key}",
-            #     n_agents=n_agents,
-            #     max_capacity=max_capacity,
-            #     hist_len=hist_len,
-            #     relative_start_day=int(relative_start_day)
-            #     if relative_start_day != "*"
-            #     else None,
-            #     sampler_seq_len=self.episode_limit,
-            # ),
-            # env = make_env("sku{}".format(n_agents), wrapper_name = "StateWrapper"),
             env_base,
             max_episode_steps = sampler_seq_len,
         )
         self._env = FlattenObservation(self._env)
 
-        self.n_agents = self._env.agent_count
+        self.n_agents = self._env.get_agent_count()
         self._obs = None
 
         self.longest_action_space = max(self._env.action_space, key=lambda x: x.n)
@@ -158,26 +120,20 @@ class ReplenishmentEnv(MultiAgentEnv):
             )
             for o in self._obs
         ]
-        # self.C_trajectory[self._env.cur_step - 1, 0, :] = self._env.in_stocks[:]
-        # self.C_trajectory[self._env.cur_step - 1, 1, :] = self._env.in_stocks[:]
-        # self.C_trajectory[self._env.cur_step - 1, 2, :] = self._env.in_stocks[:]
-
         return (
-            float(sum(sum(reward)))/1e4,
-            done, #all(done),
+            float(sum(reward))/1e4,
+            done, 
             {
                 "individual_rewards": np.array(reward).astype(np.float32)/1e4
                 if self.n_agents > 1
                 else np.array([reward,]).astype(np.float32)/1e4,
-                "cur_balance": info['cur_balance'],
+                "cur_balance": info['profit'],
                 "max_in_stock_sum": info['max_in_stock_sum']
             },
         )
 
     def get_obs(self):
         """Returns all agent observations in a list"""
-        # if np.isnan(self._obs).any():
-        #     print(self._obs)
         assert not np.isnan(self._obs).any()
         return self._obs
 
@@ -263,16 +219,15 @@ class ReplenishmentEnv(MultiAgentEnv):
         self._env.switch_mode(mode)
 
     def get_profit(self):
-        #profit = self._env.balance
-        profit = sum(self._env.profit)
-        return profit  # self._env.tracker.get_retailer_profit()
+        profit = self._env.per_balance.copy()
+        return profit
 
     def set_C_trajectory(self, C_trajectory):
         self._env.set_C_trajectory(C_trajectory)
 
     def set_local_SKU(self, local_SKU):
         self._env.set_local_SKU(local_SKU)
-        self.n_agents = self._env.agent_count
+        self.n_agents = self._env.get_agent_count()
         self._obs = None
 
         self.longest_action_space = max(self._env.action_space, key=lambda x: x.n)
@@ -283,5 +238,5 @@ class ReplenishmentEnv(MultiAgentEnv):
     def get_C_trajectory(self):
         return self.C_trajectory
     
-    def visualize_render(self,visual_outputs_path):
-        return self._env.render(visual_outputs_path)
+    def visualize_render(self, visual_output_path):
+        return self._env.render()

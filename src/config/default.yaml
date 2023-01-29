@@ -41,7 +41,6 @@ agent: "rnn" # Default rnn agent
 hidden_dim: 64 # Size of hidden state for default rnn agent
 obs_agent_id: False # Include the agent's one_hot id in the observation
 obs_last_action: True # Include the agent's last action (one_hot) in the observation
-obs_individual_obs: False
 
 # --- Experiment running params ---
 repeat_id: 1
@@ -49,9 +48,4 @@ label: "default_label"
 
 run: "default"
 use_wandb: False
-# use_wandb: True
-wandb_project_name: "eff_replenishment"
-
-# Only for MAPPO
-actor_input_seq_str: 'o_la'
-critic_input_seq_str: 'o_a'
+wandb_project_name: "marl4imp"

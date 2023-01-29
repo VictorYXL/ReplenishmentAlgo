@@ -210,7 +210,6 @@ class ParallelRunner:
                     post_transition_data["individual_rewards"].append(
                         data["info"]["individual_rewards"]
                     )
-                    # Wei's implementation
                     post_transition_data["cur_balance"].append(
                         data["info"]["cur_balance"]
                     )
@@ -219,7 +218,7 @@ class ParallelRunner:
                     if self.args.n_agents > 1:
                         episode_individual_returns[idx] += data["info"][
                             "individual_rewards"
-                        ].flatten()
+                        ]
                     else:
                         episode_individual_returns[idx] += data["info"][
                             "individual_rewards"
@@ -316,9 +315,7 @@ class ParallelRunner:
         cur_stats['max_in_stock_sum_max'] = max([d['max_in_stock_sum'] for d in final_env_infos])
         cur_stats['max_in_stock_sum_min'] = min([d['max_in_stock_sum'] for d in final_env_infos])
         cur_stats['max_in_stock_sum_mean'] = sum([d['max_in_stock_sum'] for d in final_env_infos])/len([d['max_in_stock_sum'] for d in final_env_infos])
-        # print([d['max_in_stock_sum'] for d in final_env_infos])
-        # print(final_env_infos['max_in_stock_sum'])
-        # exit()
+
         cur_returns.extend(episode_returns)
         cur_profits.extend(episode_profits)
 
@@ -338,13 +335,8 @@ class ParallelRunner:
                 for idx, parent_conn in enumerate(self.parent_conns):
                     output_path = os.path.join(visual_outputs_path, f"batch_{idx}")
                     parent_conn.send(("visualize_render", output_path))
-            # for parent_conn in self.parent_conns:
-            #     C_trajectory = parent_conn.recv()
-            #     self.C_trajectories.append(C_trajectory)
-            # for key, value in self.time_stats.items():
-            #     self.logger.log_stat(f"{key}_time_mean", value.mean, self.t_env)
+
         elif self.t_env - self.log_train_stats_t >= self.args.runner_log_interval:
-            # print("elif")
             self._log(
                 cur_returns,
                 episode_individual_returns,
@@ -371,7 +363,6 @@ class ParallelRunner:
         cur_balances = []
         for parent_conn in self.parent_conns:
             cur_balances.append(parent_conn.recv())
-        #return np.mean(np.array(cur_balances)[:, -1])
         return np.mean(np.sum(np.array(cur_balances), axis = 1))
 
     def _log(self, returns, individual_returns, profits, stats, prefix):
@@ -393,14 +384,7 @@ class ParallelRunner:
                     },
                     step=self.t_env,
                 )
-                # wandb.log(
-                #     {
-                #         f"SKUBalance/joint_{'train' if prefix == '' else 'test'}_sku{i+1}_mean": individual_returns[
-                #             :, i
-                #         ].mean()
-                #     },
-                #     step=self.t_env
-                # )
+
             for i in range(self.args.n_agents):
                 for parent_conn in self.parent_conns:
                     parent_conn.send(("get_reward_dict", None))
@@ -413,8 +397,6 @@ class ParallelRunner:
                 cur_balances = []
                 for parent_conn in self.parent_conns:
                     cur_balances.append(parent_conn.recv())
-                # print(f"balances_dicts: {np.array(cur_balances).shape}")
-                # exit()
                 wandb.log(
                     {
                         f"SKUReturn_{k}/joint_{prefix}_sku{i+1}_mean": np.mean(

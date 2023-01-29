@@ -21,6 +21,11 @@ from utils.logging import Logger
 from utils.timehelper import time_left, time_str
 
 
+def get_agent_own_state_size(env_args):
+    sc_env = StarCraft2Env(**env_args)
+    # qatten parameter setting (only use in qatten)
+    return 4 + sc_env.shield_bits_ally + sc_env.unit_type_bits
+
 
 def run(_run, _config, _log):
 
@@ -106,36 +111,6 @@ def run_sequential(args, logger):
     args.state_shape = env_info["state_shape"]
     args.accumulated_episodes = getattr(args, "accumulated_episodes", None)
 
-    # if getattr(args, 'agent_own_state_size', False):
-    #   args.agent_own_state_size = get_agent_own_state_size(args.env_args)
-
-    # Default/Base scheme
-    # original code
-    # scheme = {
-    #     "state": {"vshape": env_info["state_shape"]},
-    #     "obs": {"vshape": env_info["obs_shape"], "group": "agents"},
-    #     "mean_action": {
-    #         "vshape": (env_info["n_actions"],),
-    #         "group": "agents",
-    #         "dtype": torch.float,
-    #     },
-    #     "actions": {"vshape": (1,), "group": "agents", "dtype": torch.long},
-    #     "avail_actions": {
-    #         "vshape": (env_info["n_actions"],),
-    #         "group": "agents",
-    #         "dtype": torch.int,
-    #     },
-    #     "probs": {
-    #         "vshape": (env_info["n_actions"],),
-    #         "group": "agents",
-    #         "dtype": torch.float,
-    #     },
-    #     "reward": {"vshape": (1,)},
-    #     "individual_rewards": {"vshape": (1,), "group": "agents"},
-    #     "terminated": {"vshape": (1,), "dtype": torch.uint8},
-    # }
-
-    # Wei's implementation
     scheme = {
         "state": {"vshape": env_info["state_shape"]},
         "obs": {"vshape": env_info["obs_shape"], "group": "agents"},
@@ -177,19 +152,12 @@ def run_sequential(args, logger):
 
     # Setup multiagent controller here
     mac = mac_REGISTRY[args.mac](buffer.scheme, groups, args)
-
-    # map_name = args.env_args["map_name"]
-    # n_agents = int(re.findall(r"n(.*)c", map_name)[0])
-    # max_capacity = int(re.findall(r"c(.*)d", map_name)[0])
-    # hist_len = int(re.findall(r"d(.*)s", map_name)[0])
             
     val_args = copy.deepcopy(args)
-    # val_map_name = f"n{n_agents}c{max_capacity}d{hist_len}s{300}l{100}"
     val_args.env_args["mode"] = "validation"
     val_runner = r_REGISTRY[args.runner](args=val_args, logger=logger)
 
     test_args = copy.deepcopy(args)
-    # test_map_name = f"n{n_agents}c{max_capacity}d{hist_len}s{400}l{100}"
     test_args.env_args["mode"] = "test"
     test_runner = r_REGISTRY[args.runner](args=test_args, logger=logger)
 
@@ -211,35 +179,6 @@ def run_sequential(args, logger):
         learner.cuda()
 
     if args.checkpoint_path != "":
-
-        # timesteps = []
-        # timestep_to_load = 0
-
-        # if not os.path.isdir(args.checkpoint_path):
-        #     logger.console_logger.info(
-        #         "Checkpoint directiory {} doesn't exist".format(args.checkpoint_path)
-        #     )
-        #     return
-
-        # # Go through all files in args.checkpoint_path
-        # for name in os.listdir(args.checkpoint_path):
-        #     full_name = os.path.join(args.checkpoint_path, name)
-        #     # Check if they are dirs the names of which are numbers
-        #     if os.path.isdir(full_name) and name.isdigit():
-        #         timesteps.append(int(name))
-
-        # if args.load_step == 0:
-        #     # choose the max timestep
-        #     timestep_to_load = max(timesteps)
-        # else:
-        #     # choose the timestep closest to load_step
-        #     timestep_to_load = min(timesteps, key=lambda x: abs(x - args.load_step))
-
-        # model_path = os.path.join(args.checkpoint_path, str(timestep_to_load))
-
-        # logger.console_logger.info("Loading model from {}".format(model_path))
-        # learner.load_models(model_path)
-        # runner.t_env = timestep_to_load
         test_runner.mac.load_models(args.checkpoint_path)
 
         if args.evaluate or args.save_replay:
@@ -249,10 +188,6 @@ def run_sequential(args, logger):
             test_runner.run(test_mode=True, visual_outputs_path=vis_save_path)
             test_cur_avg_balances = test_runner.get_overall_avg_balance()
             logger.console_logger.info("test_cur_avg_balances : {}".format(test_cur_avg_balances))
-            # evaluate_sequential(args, runner)
-            # logger.log_stat("episode", runner.t_env, runner.t_env)
-            # logger.print_recent_stats()
-            # logger.console_logger.info("Finished Evaluation")
             return
 
     # start training
@@ -314,16 +249,7 @@ def run_sequential(args, logger):
             last_time = time.time()
 
             last_test_T = runner.t_env
-            # for _ in range(n_test_runs):
-            #     # runner.run(test_mode=True)
-            #     # print(25*'#' + 'Start Eval' + 25*'#')
-            #     vis_save_path = os.path.join(
-            #         args.local_results_path, args.unique_token, "vis"
-            #     ) if os.getenv("AMLT_OUTPUT_DIR") is None else os.path.join(os.getenv("AMLT_OUTPUT_DIR"), "results", args.unique_token, "vis")
-            #     test_runner.t_env = runner.t_env
-            #     test_runner.run(test_mode=True, visual_outputs_path=vis_save_path)
-            #     # print(25*'#' + 'End Eval' + 25*'#')
-            for _ in range(n_test_runs):
+            for run_index in range(n_test_runs):
                 val_runner.t_env = runner.t_env
                 episode_batch = val_runner.run(test_mode=True, visual_outputs_path=None)
                 cur_avg_balances = val_runner.get_overall_avg_balance()
@@ -331,6 +257,17 @@ def run_sequential(args, logger):
                 test_runner.t_env = runner.t_env
                 test_episode_batch = test_runner.run(test_mode=True, visual_outputs_path=None)
                 test_cur_avg_balances = test_runner.get_overall_avg_balance()
+
+                os.makedirs(os.path.join(args.local_results_path, args.unique_token), exist_ok=True)
+                log_path = os.path.join(args.local_results_path, args.unique_token, "log.txt")
+                f = open(log_path, "a")
+                f.write("Run: {}".format(run_index) + "\n")
+
+                f.write("val_cur_avg_balances : {}\n".format(cur_avg_balances))
+                f.write("val_max_avg_balance : {}\n".format(max_avg_balance))
+                f.write("test_cur_avg_balances : {}\n".format(test_cur_avg_balances))
+                f.write("test_max_avg_balance : {}\n".format(test_max_avg_balance))
+                f.close()
                 
                 if cur_avg_balances > 0 and cur_avg_balances > max_avg_balance:
                     model_save_time = val_runner.t_env
@@ -349,6 +286,7 @@ def run_sequential(args, logger):
                 logger.console_logger.info("val_max_avg_balance : {}".format(max_avg_balance))
                 logger.console_logger.info("test_cur_avg_balances : {}".format(test_cur_avg_balances))
                 logger.console_logger.info("test_max_avg_balance : {}".format(test_max_avg_balance))
+
 
         if args.save_model and (
             runner.t_env - model_save_time >= args.save_model_interval

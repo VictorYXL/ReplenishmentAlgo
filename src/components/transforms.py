@@ -1,4 +1,4 @@
-import torch
+import torch as th
 
 
 class Transform:
@@ -19,4 +19,4 @@ class OneHot(Transform):
         return y_onehot.float()
 
     def infer_output_info(self, vshape_in, dtype_in):
-        return (self.out_dim,), torch.float32
+        return (self.out_dim,), th.float32

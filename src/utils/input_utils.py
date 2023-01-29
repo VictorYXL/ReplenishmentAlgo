@@ -1,6 +1,5 @@
 import torch
 
-
 def build_critic_inputs(inputs_seq_str, batch, t=None):
     bs = batch.batch_size
     max_t = batch.max_seq_length if t is None else 1
@@ -9,9 +8,8 @@ def build_critic_inputs(inputs_seq_str, batch, t=None):
     n_agents = int(inputs_seq_str.split("_")[-3])
     n_actions = int(inputs_seq_str.split("_")[-2])
     share_critic = int(inputs_seq_str.split("_")[-1])
-    # print(n_agents)
-    # if 's' in inputs_seq_str:
-        # n_agents = 1
+    if 's' in inputs_seq_str:
+        n_agents = 1
     
     for item in inputs_seq_str.split("_")[:-2]:
         if item == "s":
@@ -71,30 +69,6 @@ def build_critic_inputs(inputs_seq_str, batch, t=None):
             # last individual actions
             inputs.append(batch["actions_onehot"][:, ts])
 
-        elif item == "s/c":
-            state = batch["state"][:, ts].reshape(bs, n_agents, -1)
-            concat_obs = torch.cat([state[..., :5], state[..., 8:]], dim=-1)
-            inputs.append(concat_obs.unsqueeze(2).repeat(1, 1, n_agents, 1))
-        elif item == "o/c":
-            obs = batch["obs"][:, ts]
-            inputs.append(torch.cat([obs[..., :5], obs[..., 8:]], dim=-1))
-        elif item == "c^i":
-            inputs.append(batch["obs"][:, ts, :, 5:8])
-        elif item == "c^{-i}":
-            context = batch["obs"][:, ts, :, 5:8]
-            others_context = context.sum(dim=-2, keepdim=True) - context
-            inputs.append(others_context)
-        elif item == "ma":
-            inputs.append(batch["mean_action"][:, ts])
-        elif item == "mo":
-            mean_obs = batch["obs"][:, ts].mean(dim=-2, keepdim=True)
-            inputs.append(mean_obs.repeat(1, n_agents, 1))
-        elif item == "d":
-            inputs.append((torch.arange(max_t, device=batch.device) / max_t)
-                .unsqueeze(0)
-                .unsqueeze(-1)
-                .unsqueeze(-1)
-                .expand(bs, -1, n_agents, -1))
     
     inputs = torch.cat([x.reshape(bs, max_t, n_agents, -1) for x in inputs], dim=-1)
     if share_critic:
@@ -131,21 +105,6 @@ def get_critic_input_shape(inputs_seq_str, scheme):
         elif item == "la^i":
             input_shape += n_actions
 
-        # for ablation study
-        elif item == "s/c":
-            input_shape += scheme["state"]["vshape"] - 3 * n_agents
-        elif item == "o/c":
-            input_shape += scheme["obs"]["vshape"] - 3
-        elif item == "c^i":
-            input_shape += 3
-        elif item == "c^{-i}":
-            input_shape += 3
-        elif item == "ma":
-            input_shape += n_actions
-        elif item == "mo":
-            input_shape += scheme["obs"]["vshape"]
-        elif item == "d":
-            input_shape += 1
 
     return input_shape
 
@@ -172,8 +131,6 @@ def build_actor_inputs(inputs_seq_str, batch, t=None):
             inputs.append(
                 torch.eye(n_agents, device=batch.device).unsqueeze(0).expand(bs, -1, -1)
             )
-        elif item == "d":
-            input_shape += 1
 
     inputs = torch.cat([x.reshape(bs, n_agents, -1) for x in inputs], dim=-1)
     return inputs

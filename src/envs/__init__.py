@@ -1,25 +1,17 @@
-import os
-import sys
 from functools import partial
-
-from .multiagentenv import MultiAgentEnv
+from smac.env import MultiAgentEnv, StarCraft2Env
 from .replenishment import ReplenishmentEnv
-
-try:
-    gfootball = True
-    from .gfootball import GoogleFootballEnv
-except:
-    gfootball = False
-
+import sys
+import os
 
 def env_fn(env, **kwargs) -> MultiAgentEnv:
     return env(**kwargs)
 
-
 REGISTRY = {}
+REGISTRY["sc2"] = partial(env_fn, env=StarCraft2Env)
 
 if sys.platform == "linux":
-    os.environ.setdefault("SC2PATH", "~/StarCraftII")
-
+    os.environ.setdefault("SC2PATH",
+                          os.path.join(os.getcwd(), "3rdparty", "StarCraftII"))
 
 REGISTRY["replenishment"] = partial(env_fn, env=ReplenishmentEnv)

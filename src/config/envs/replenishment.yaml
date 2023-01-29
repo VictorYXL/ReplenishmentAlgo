@@ -4,8 +4,6 @@ env_args:
   key: "replenishment_efficient_env-v0"
   map_name: "n1000c8000d1"
   time_limit: 1460
-  n_agents: 50
-  task_type: "Standard"
 
 test_greedy: True
 test_nepisode: 10 #10

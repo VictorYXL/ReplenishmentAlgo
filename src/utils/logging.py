@@ -1,11 +1,6 @@
-import logging
-import re
 from collections import defaultdict
-
+import logging
 import numpy as np
-
-import wandb
-
 
 class Logger:
     def __init__(self, console_logger):
@@ -14,37 +9,12 @@ class Logger:
         self.use_tb = False
         self.use_sacred = False
         self.use_hdf = False
-        self.use_wandb = False
 
         self.stats = defaultdict(lambda: [])
-
-    def setup_wandb(self, args):
-
-        wandb.init(name=args.unique_token, project=args.wandb_project_name, config=args)
-        wandb.run.log_code(".")
-        wandb.config.update(
-            {
-                "algo": args.name,
-                "n_agents": int(re.findall(r"n(.*)c", args.env_args["map_name"])[0]),
-                "max_capacity": int(
-                    re.findall(r"c(.*)d", args.env_args["map_name"])[0]
-                ),
-                "hist_len": int(re.findall(r"d(.*)s", args.env_args["map_name"])[0]),
-                "relative_start_day": re.findall(r"s(.*)l", args.env_args["map_name"])[
-                    0
-                ],
-                "sampler_seq_len": int(
-                    re.findall(r"l(.*)", args.env_args["map_name"])[0]
-                ),
-            }
-        )
-        self.wandb_logger = wandb.log
-        self.use_wandb = True
 
     def setup_tb(self, directory_name):
         # Import here so it doesn't have to be installed if you don't use it
         from tensorboard_logger import configure, log_value
-
         configure(directory_name)
         self.tb_logger = log_value
         self.use_tb = True
@@ -58,8 +28,7 @@ class Logger:
 
         if self.use_tb:
             self.tb_logger(key, value, t)
-        if self.use_wandb:
-            self.wandb_logger({key: value}, step=t)
+
         if self.use_sacred and to_sacred:
             if key in self.sacred_info:
                 self.sacred_info["{}_T".format(key)].append(t)
@@ -69,26 +38,17 @@ class Logger:
                 self.sacred_info[key] = [value]
 
     def print_recent_stats(self):
-        log_str = "Recent Stats | t_env: {:>10} | Episode: {:>8}\n".format(
-            *self.stats["episode"][-1]
-        )
+        log_str = "Recent Stats | t_env: {:>10} | Episode: {:>8}\n".format(*self.stats["episode"][-1])
         i = 0
         for (k, v) in sorted(self.stats.items()):
             if k == "episode":
                 continue
             i += 1
             window = 5 if k != "epsilon" else 1
-            try:
-                item = "{:.4f}".format(np.mean([x[1] for x in self.stats[k][-window:]]))
-            except:
-                item = "{:.4f}".format(
-                    np.mean([x[1].item() for x in self.stats[k][-window:]])
-                )
+            item = "{:.4f}".format(np.mean([x[1] for x in self.stats[k][-window:]]))
             log_str += "{:<25}{:>8}".format(k + ":", item)
             log_str += "\n" if i % 4 == 0 else "\t"
         self.console_logger.info(log_str)
-        # Reset stats to avoid accumulating logs in memory
-        self.stats = defaultdict(lambda: [])
 
 
 # set up a custom logger
@@ -96,11 +56,10 @@ def get_logger():
     logger = logging.getLogger()
     logger.handlers = []
     ch = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "[%(levelname)s %(asctime)s] %(name)s %(message)s", "%H:%M:%S"
-    )
+    formatter = logging.Formatter('[%(levelname)s %(asctime)s] %(name)s %(message)s', '%H:%M:%S')
     ch.setFormatter(formatter)
     logger.addHandler(ch)
-    logger.setLevel("INFO")
+    logger.setLevel('DEBUG')
 
     return logger
+

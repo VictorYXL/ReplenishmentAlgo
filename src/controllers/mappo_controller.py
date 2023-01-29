@@ -49,15 +49,7 @@ class MAPPOMAC:
                     ep_batch.batch_size * self.n_agents, -1
                 )
                 agent_outs[reshaped_avail_actions == 0] = -1e10
-            # temperature = min(1.0 + t_env/1000000 * (90 - 1.0), 90)
-            
-            # agent_outs = agent_outs * temperature
-            # print(temperature)
-            # agent_outs = torch.tanh(agent_outs) * temperature
             agent_outs = torch.nn.functional.softmax(agent_outs, dim=-1)
-            # if t == 50:
-            #     # print(agent_outs.shape)
-            #     print(agent_outs[0].max())
         return agent_outs.view(ep_batch.batch_size, self.n_agents, -1)
 
     def init_hidden(self, batch_size):
