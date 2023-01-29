@@ -100,7 +100,6 @@ def evaluate_sequential(args, runner):
 
 
 def run_sequential(args, logger):
-
     # Init runner so we can get env info
     runner = r_REGISTRY[args.runner](args=args, logger=logger)
 
@@ -158,6 +157,7 @@ def run_sequential(args, logger):
     val_runner = r_REGISTRY[args.runner](args=val_args, logger=logger)
 
     test_args = copy.deepcopy(args)
+    test_args.env_args["vis_path"] = os.path.join(args.local_results_path, args.unique_token, "env_vis")
     test_args.env_args["mode"] = "test"
     test_runner = r_REGISTRY[args.runner](args=test_args, logger=logger)
 

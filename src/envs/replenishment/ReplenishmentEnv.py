@@ -73,12 +73,9 @@ class ReplenishmentEnv(MultiAgentEnv):
         task_type = "Standard",
         mode = "train",
         time_limit=1460,
+        vis_path=None,
         **kwargs,
     ):  
-        env_base = make_env("sku{}.{}".format(n_agents, task_type), wrapper_names = ["ObservationWrapper4OldCode", "FlattenWrapper"], 
-                            mode = mode)
-        sampler_seq_len = env_base.config['env']['horizon']
-        self.episode_limit = min(time_limit, sampler_seq_len)
         action_space = [0.00, 0.16, 0.33, 0.40, 0.45, 0.50, 0.55, 0.60, 0.66, 0.83, 
                         1.00, 1.16, 1.33, 1.50, 1.66, 1.83, 2.00, 2.16, 2.33, 2.50, 
                         2.66, 2.83, 3.00, 3.16, 3.33, 3.50, 3.66, 3.83, 4.00, 5.00, 
@@ -87,7 +84,11 @@ class ReplenishmentEnv(MultiAgentEnv):
                             "action" : {"mode": "demand_mean_discrete",
                                         "space": action_space}
                         } 
-        env_base.reset(update_config=update_config)
+        env_base = make_env("sku{}.{}".format(n_agents, task_type), wrapper_names = ["ObservationWrapper4OldCode", "FlattenWrapper"], 
+                            mode = mode, vis_path=vis_path, update_config=update_config)
+        sampler_seq_len = env_base.config['env']['horizon']
+        self.episode_limit = min(time_limit, sampler_seq_len)
+        env_base.reset()
 
         self._env = TimeLimit(
             env_base,
