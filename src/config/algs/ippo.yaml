@@ -5,7 +5,7 @@
 env_args:
   key: "replenishment_efficient_env-v0"
   n_agents: 50
-  task_type: "sku50_multi_store.standard"
+  task_type: "sku50.multi_store.standard"
   mode: train
   time_limit: 100
 test_interval: 8000
