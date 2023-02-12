@@ -177,7 +177,6 @@ def run_sequential(args, logger):
 
     if args.use_cuda:
         learner.cuda()
-
     if args.checkpoint_path != "":
         test_runner.mac.load_models(args.checkpoint_path)
 

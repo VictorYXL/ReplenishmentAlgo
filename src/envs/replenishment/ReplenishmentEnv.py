@@ -85,7 +85,7 @@ class ReplenishmentEnv(MultiAgentEnv):
                                         "space": action_space}
                         } 
         env_base = make_env("sku{}.{}".format(n_agents, task_type), wrapper_names = ["ObservationWrapper4OldCode", "FlattenWrapper"], 
-                            mode = mode, vis_path=vis_path, update_config=update_config)
+                            mode=mode, vis_path=vis_path, update_config=update_config)
         sampler_seq_len = env_base.config['env']['horizon']
         self.episode_limit = min(time_limit, sampler_seq_len)
         env_base.reset()
