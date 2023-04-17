@@ -7,6 +7,7 @@ import time
 import copy
 from os.path import abspath, dirname
 from types import SimpleNamespace as SN
+import queue
 
 import pandas as pd
 import torch
@@ -113,6 +114,7 @@ def run_sequential(args, logger):
     scheme = {
         "state": {"vshape": env_info["state_shape"]},
         "obs": {"vshape": env_info["obs_shape"], "group": "agents"},
+        "n_warehouses": {"vshape": env_info["obs_shape"], "group": "agents"},
         "mean_action": {
             "vshape": (env_info["n_actions"],),
             "group": "agents",
@@ -130,6 +132,7 @@ def run_sequential(args, logger):
             "dtype": torch.float,
         },
         "reward": {"vshape": (1,)},
+        #TODO: 为什么还有一个个人的reward
         "individual_rewards": {"vshape": (1,), "group": "agents"},
         "cur_balance": {"vshape": (1,), "group": "agents"},
         "terminated": {"vshape": (1,), "dtype": torch.uint8},
@@ -154,6 +157,7 @@ def run_sequential(args, logger):
             
     val_args = copy.deepcopy(args)
     val_args.env_args["mode"] = "validation"
+    # 目前config中定义的runner全是parallel的
     val_runner = r_REGISTRY[args.runner](args=val_args, logger=logger)
 
     test_args = copy.deepcopy(args)
@@ -185,8 +189,8 @@ def run_sequential(args, logger):
                 args.local_results_path, args.unique_token, "vis"
             ) if os.getenv("AMLT_OUTPUT_DIR") is None else os.path.join(os.getenv("AMLT_OUTPUT_DIR"), "results", args.unique_token, "vis")
             test_runner.run(test_mode=True, visual_outputs_path=vis_save_path)
-            test_cur_avg_balances = test_runner.get_overall_avg_balance()
-            logger.console_logger.info("test_cur_avg_balances : {}".format(test_cur_avg_balances))
+            test_cur_avg_balance, test_cur_store_balance = test_runner.get_overall_avg_balance()
+            logger.console_logger.info("test_cur_avg_balance : {}".format(test_cur_avg_balance))
             return
 
     # start training
@@ -197,13 +201,17 @@ def run_sequential(args, logger):
     visual_time = 0
     max_avg_balance = -1
     test_max_avg_balance = -1
+    max_store_balance = [0,0,0]
+    test_max_store_balance = [0,0,0]
     max_model_path = None
 
     start_time = time.time()
     last_time = start_time
 
     logger.console_logger.info("Beginning training for {} timesteps".format(args.t_max))
-
+    # 停止条件为，最近10次测试中，最大波动不超过5%
+    recent_val_balance_queue = queue.Queue(maxsize = 10)
+    test_flag = False
     while runner.t_env <= args.t_max:
 
         # Run for a whole episode at a time
@@ -233,6 +241,7 @@ def run_sequential(args, logger):
             del episode_sample
 
         # Execute test runs once in a while
+        # n_test_runs是什么意思？测试需要进行的episode数目，除以并行的episode数目
         n_test_runs = max(1, args.test_nepisode // runner.batch_size)
         if (runner.t_env - last_test_T) / args.test_interval >= 1.0:
 
@@ -248,45 +257,64 @@ def run_sequential(args, logger):
             last_time = time.time()
 
             last_test_T = runner.t_env
+            # 在n次测试上取平均值。因为是parallel的，所以例如，假如batch_size = 8,test_nepisode = 10, 那么n_test_runs = 1。
             for run_index in range(n_test_runs):
                 val_runner.t_env = runner.t_env
+                # 在验证集上跑，但是不进行可视化
+                # 在测试模式上返回的episode_batch是不使用的，测试模式仅仅是为了获得统计数据
                 episode_batch = val_runner.run(test_mode=True, visual_outputs_path=None)
-                cur_avg_balances = val_runner.get_overall_avg_balance()
-                
+                # TODO:若有问题，难道是get_overall_avg_balance就不对？应该就是统计的有问题！可能是网络的问题，也可能是统计计算的时候有问题，仔细看看
+                cur_avg_balance, cur_store_balances = val_runner.get_overall_avg_balance()
+
                 test_runner.t_env = runner.t_env
                 test_episode_batch = test_runner.run(test_mode=True, visual_outputs_path=None)
-                test_cur_avg_balances = test_runner.get_overall_avg_balance()
+                test_cur_avg_balance, test_cur_store_balance = test_runner.get_overall_avg_balance()
 
+                if not recent_val_balance_queue.full():
+                    recent_val_balance_queue.put(cur_avg_balance)
+                else:
+                    recent_val_balance_queue.get()
+                    recent_val_balance_queue.put(cur_avg_balance)
+                    test_flag = True
                 os.makedirs(os.path.join(args.local_results_path, args.unique_token), exist_ok=True)
                 log_path = os.path.join(args.local_results_path, args.unique_token, "log.txt")
                 f = open(log_path, "a")
                 f.write("Run: {}".format(run_index) + "\n")
 
-                f.write("val_cur_avg_balances : {}\n".format(cur_avg_balances))
+                f.write("val_cur_avg_balance : {}\n".format(cur_avg_balance))
                 f.write("val_max_avg_balance : {}\n".format(max_avg_balance))
-                f.write("test_cur_avg_balances : {}\n".format(test_cur_avg_balances))
+                f.write("test_cur_avg_balance : {}\n".format(test_cur_avg_balance))
                 f.write("test_max_avg_balance : {}\n".format(test_max_avg_balance))
-                f.close()
+
+                f.write("val_cur_store_balances : {}\n".format(cur_store_balances))
+                f.write("val_max_store_balance : {}\n".format(max_store_balance))
+                f.write("test_cur_store_balance : {}\n".format(test_cur_store_balance))
+                f.write("test_max_store_balance : {}\n".format(test_max_store_balance))
+                #TODO:在这里插入每个store的价格
                 
-                if cur_avg_balances > 0 and cur_avg_balances > max_avg_balance:
+                f.close()
+                # 所以说这里存的最大值，都是在验证集上balance最大的时候存的，而非在测试集最大时存
+                if cur_avg_balance > 0 and cur_avg_balance > max_avg_balance:
                     model_save_time = val_runner.t_env
                     save_path = os.path.join(
                         args.local_results_path, args.unique_token, "models", str(runner.t_env)
                     ) if os.getenv("AMLT_OUTPUT_DIR") is None else os.path.join(os.getenv("AMLT_OUTPUT_DIR"), "results", args.unique_token, "models", str(runner.t_env))
                     save_path = save_path.replace('*', '_')
                     max_model_path = save_path
-                    max_avg_balance = cur_avg_balances
-                    test_max_avg_balance = test_cur_avg_balances
+                    max_avg_balance = cur_avg_balance
+                    max_store_balance = cur_store_balances
+                    test_max_avg_balance = test_cur_avg_balance
+                    test_max_store_balance = test_cur_store_balance
                     os.makedirs(save_path, exist_ok=True)
                     logger.console_logger.info("Saving models to {}".format(save_path))
                     learner.save_models(save_path)
 
-                logger.console_logger.info("val_cur_avg_balances : {}".format(cur_avg_balances))
+                logger.console_logger.info("val_cur_avg_balance : {}".format(cur_avg_balance))
                 logger.console_logger.info("val_max_avg_balance : {}".format(max_avg_balance))
-                logger.console_logger.info("test_cur_avg_balances : {}".format(test_cur_avg_balances))
+                logger.console_logger.info("test_cur_avg_balance : {}".format(test_cur_avg_balance))
                 logger.console_logger.info("test_max_avg_balance : {}".format(test_max_avg_balance))
 
-
+        # 每model_save_time保存一次
         if args.save_model and (
             runner.t_env - model_save_time >= args.save_model_interval
             or model_save_time == 0
@@ -336,7 +364,20 @@ def run_sequential(args, logger):
             logger.log_stat("episode", episode, runner.t_env)
             logger.print_recent_stats()
             last_log_T = runner.t_env
+        # 如果维护的最小值和最大值的差别小于他俩之和的5%，那就认为是收敛了
+        if test_flag:
+            test_flag = False
+            max_balance = max(recent_val_balance_queue.queue)
+            min_balance = min(recent_val_balance_queue.queue)
+            mean_balance = sum(recent_val_balance_queue.queue)/len(recent_val_balance_queue.queue)
+            positive_deviation_ratio = abs((max_balance-mean_balance)/mean_balance)
+            negative_deviation_ratio = abs((min_balance-mean_balance)/mean_balance)
+            print("max : {}, min : {}, mean : {}".format(max_balance, min_balance, mean_balance))
+            print("positive_deviation_ratio : {}, negative_deviation_ratio : {}".format(positive_deviation_ratio,negative_deviation_ratio))
+            if positive_deviation_ratio < 0.05 and negative_deviation_ratio < 0.05:
+                break
 
+            
     n_test_runs = max(1, args.test_nepisode // runner.batch_size)
     for _ in range(n_test_runs):
         learner.load_models(max_model_path)
@@ -356,7 +397,7 @@ def run_sequential(args, logger):
         os.makedirs(vis_save_path, exist_ok=True)
         vis_save_path = vis_save_path.replace('*', '_')
         test_runner.run(test_mode=True, visual_outputs_path=vis_save_path)
-        test_avg_balances = test_runner.get_overall_avg_balance()
+        test_avg_balances, test_store_balances = test_runner.get_overall_avg_balance()
         logger.console_logger.info("test_avg_balances : {}".format(test_avg_balances))
 
     # close env

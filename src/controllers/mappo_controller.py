@@ -27,7 +27,7 @@ class MAPPOMAC:
     def select_actions(self, ep_batch, t_ep, t_env, bs=slice(None), test_mode=False):
         # Only select actions for the selected batch elements in bs
         avail_actions = ep_batch["avail_actions"][:, t_ep]
-        agent_outputs = self.forward(ep_batch, t_ep, t_env, test_mode=test_mode)
+        agent_outputs = self.forward(ep_batch, t_ep, t_env, test_mode=test_mode) #这个是经过softmax之后的q值，各个动作都有被选到的概率的
         chosen_actions = self.action_selector.select_action(
             agent_outputs[bs], avail_actions[bs], t_env, test_mode=test_mode
         )
@@ -36,7 +36,7 @@ class MAPPOMAC:
     def forward(self, ep_batch, t, t_env, test_mode=False):
         agent_inputs = build_actor_inputs(self.input_seq_str, ep_batch, t)
         avail_actions = ep_batch["avail_actions"][:, t]
-        if test_mode:
+        if test_mode:   # TODO:eval是干嘛？
             self.agent.eval()
         agent_outs, self.hidden_states = self.agent(agent_inputs, self.hidden_states)
         # Softmax the agent outputs if they're policy logits

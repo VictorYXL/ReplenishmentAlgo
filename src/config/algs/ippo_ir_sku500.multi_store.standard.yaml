@@ -1,7 +1,7 @@
 env_args:
   key: "replenishment_efficient_env-v0"
-  n_agents: 50
-  task_type: "sku1000.multi_store.fluctuating_demand"
+  n_agents: 500
+  task_type: "sku500.multi_store.standard"
   mode: train
   time_limit: 100
 test_interval: 8000
@@ -10,8 +10,8 @@ runner_log_interval: 8000
 learner_log_interval: 8000
 
 action_selector: "multinomial"
-epsilon_start: .0
-epsilon_finish: .0
+epsilon_start: 0.0
+epsilon_finish: 0.0
 epsilon_anneal_time: 100000
 mask_before_softmax: True
 

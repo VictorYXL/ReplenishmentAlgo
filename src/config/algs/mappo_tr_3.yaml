@@ -1,7 +1,7 @@
 env_args:
   key: "replenishment_efficient_env-v0"
-  n_agents: 50
-  task_type: "sku1000.multi_store.fluctuating_demand"
+  n_agents: 200
+  task_type: "sku200.multi_store.standard"
   mode: train
   time_limit: 100
 test_interval: 8000
@@ -40,17 +40,16 @@ save_probs: True
 
 agent_output_type: "pi_logits"
 learner: "local_ppo_learner"
-critic_type: "mappo_rnn_critic"
-critic_input_seq_str: 'o'
+critic_type: "mappo_rnn_critic_share"
+critic_input_seq_str: 's'
 
 use_layer_norm: True 
 use_orthogonal: True
 gain: 0.01
 use_value_norm: True
 use_zero_like_context: True
-use_individual_rewards: True
+use_individual_rewards: False
 use_mean_team_reward: True
 
-name: "ippo_ir"
+name: "mappo_tr"
 run: "mappo_run"
-visual_outputs_path: "result"

@@ -20,17 +20,21 @@ class ParallelRunner:
         self.logger = logger
         self.batch_size = self.args.batch_size_run
         # Make subprocesses for the envs
+        # 创建管道，用于一读一写的双工情况，返回值为两个connection对象，其中一个用于读，一个用于写
         self.parent_conns, self.worker_conns = zip(
             *[Pipe() for _ in range(self.batch_size)]
         )
         env_fn = env_REGISTRY[self.args.env]
+        # self.n_warehouse = env_fn.warehouse_count()
         env_args = [self.args.env_args.copy() for _ in range(self.batch_size)]
 
         for i in range(len(env_args)):
             env_args[i]["seed"] += i
 
+        # 创建进程列表self.ps，其中每个元素都是一个通信，首先听取来自parent_conns的信息，然后将信息采用env_worker函数来发送信息给环境，进行交互
         self.ps = [
             Process(
+                # env_workder需要两个参数，第一个是说明pipe的一端，第二个是说明采用的环境
                 target=env_worker,
                 args=(worker_conn, CloudpickleWrapper(partial(env_fn, **env_arg))),
             )
@@ -100,6 +104,7 @@ class ParallelRunner:
         }
         # Get the obs, state and avail_actions back
         for parent_conn in self.parent_conns:
+            # data是env_worker与环境交互后所得到的东西, 这里在等待交互后从环境听取信息
             data = parent_conn.recv()
             pre_transition_data["state"].append(data["state"])
             pre_transition_data["avail_actions"].append(data["avail_actions"])
@@ -111,9 +116,11 @@ class ParallelRunner:
         self.batch.update(pre_transition_data, ts=0)
 
         self.t = 0
+        # 在多线程之中，经过的总的时间步数
         self.env_steps_this_run = 0
         self.C_trajectories = []
 
+    # visual_outputs_path如果不是none，那么隔一段时间就会开始一次视觉render
     def run(self, test_mode=False, visual_outputs_path=None):
         self.reset(test_mode=test_mode)
 
@@ -125,6 +132,7 @@ class ParallelRunner:
 
         self.mac.init_hidden(batch_size=self.batch_size)
         terminated = [False for _ in range(self.batch_size)]
+        # 这里是还没有到terminate状态的env的序号
         envs_not_terminated = [
             b_idx for b_idx, termed in enumerate(terminated) if not termed
         ]
@@ -137,6 +145,8 @@ class ParallelRunner:
 
             # Pass the entire batch of experiences up till now to the agents
             # Receive the actions for each agent at this timestep in a batch for each un-terminated env
+            # TODO:这两个不是一样的？参数也是一样的
+
             if save_probs:
                 actions, probs = self.mac.select_actions(
                     self.batch,
@@ -223,6 +233,7 @@ class ParallelRunner:
                         episode_individual_returns[idx] += data["info"][
                             "individual_rewards"
                         ][0]
+                    # 这个就是每个交互得到的balance，但是好像并没有进行处理？
                     episode_balance[idx] = data["info"]["cur_balance"]
                     # print(f"episode_balance: {len(episode_balance)}")
                     episode_lengths[idx] += 1
@@ -230,6 +241,7 @@ class ParallelRunner:
                         self.env_steps_this_run += 1
 
                     env_terminated = False
+                    # 如果是结束状态，那么就将结束的info添加，用于最后的统计结果
                     if data["terminated"]:
                         final_env_infos.append(data["info"])
                     if data["terminated"] and not data["info"].get(
@@ -274,9 +286,12 @@ class ParallelRunner:
         # Get profit for each env
         episode_profits = []
         for parent_conn in self.parent_conns:
+            # get_profit函数返回的，就是在整次交互中所得到的balance
             parent_conn.send(("get_profit", None))
+        # 前一步送出了请求，这一步来接收
         for parent_conn in self.parent_conns:
             episode_profit = parent_conn.recv()
+            # 将episode_profit，用真实得到的profit除以时间t，然后再乘以最大时间长度，得到一个类似于最大时间长度的总量？
             episode_profits.append(episode_profit / self.t * (self.episode_limit))
 
         for parent_conn in self.parent_conns:
@@ -356,14 +371,27 @@ class ParallelRunner:
 
     def get_C_trajectories(self):
         return np.array(self.C_trajectories)
-
+    
+    # TODO:注意看这个函数有没有问题,因为统计出来的利润不对
     def get_overall_avg_balance(self):
         for parent_conn in self.parent_conns:
             parent_conn.send(("get_profit", None))
         cur_balances = []
         for parent_conn in self.parent_conns:
             cur_balances.append(parent_conn.recv())
-        return np.mean(np.sum(np.array(cur_balances), axis = 1))
+        cur_balances = np.array(cur_balances)
+        # 为了展示每个商店的profit而设计的
+        n_store = 3
+        # 将每一层的每个sku都独立的看作智能体？
+        n_skus = int(self.args.n_agents/n_store)
+        cur_store_balances = []
+        for i in range(n_store):
+            store_profit = cur_balances[:,i*n_skus:(i+1)*n_skus]
+            cur_store_balances.append(np.mean(np.sum(store_profit,axis = 1)))
+
+        # cur_balances中每个元素都是拉平之后的数组。其中，前num_sku个数字，就是store1的balance
+        # TODO:怎么每个store的balance都是一样的？测试的时候是不是没有必要parallel runner？
+        return np.mean(np.sum(cur_balances, axis = 1)), cur_store_balances
 
     def _log(self, returns, individual_returns, profits, stats, prefix):
         self.logger.log_stat(prefix + "_return_mean", np.mean(returns), self.t_env)
@@ -455,15 +483,19 @@ def env_worker(remote, env_fn):
     # Make environment
     env = env_fn.x()
     while True:
+        # remote先进入一个等待状态，等待收听东西，然后接收到了东西之后，经过环境处理再send出去
         cmd, data = remote.recv()
         if cmd == "step":
             actions = data
             # Take a step in the environment
+            # 这里的reward是一个int。代表着batch['reward']中，只有一个int值，所有智能体共享一个reward
             reward, terminated, env_info = env.step(actions)
             # Return the observations, avail_actions and state to make the next action
             state = env.get_state()
             avail_actions = env.get_avail_actions()
             obs = env.get_obs()
+            # obs中每个智能体加上自己所在的层数
+            
             remote.send(
                 {
                     # Data for the next timestep needed to pick an action
@@ -496,6 +528,7 @@ def env_worker(remote, env_fn):
         elif cmd == "switch_mode":
             mode = data
             env.switch_mode(mode)
+        # 查看这个函数
         elif cmd == "get_profit":
             remote.send(env.get_profit())
         elif cmd == "get_C_trajectory":

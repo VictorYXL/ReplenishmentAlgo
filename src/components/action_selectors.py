@@ -90,20 +90,21 @@ class MultinomialActionSelector:
         self.test_greedy = getattr(args, "test_greedy", True)
         self.save_probs = getattr(self.args, "save_probs", False)
 
+    # TODO:怎么选择的？
     def select_action(self, agent_inputs, avail_actions, t_env, test_mode=False):
-        masked_policies = agent_inputs.clone()
+        masked_policies = agent_inputs.clone() #agent_inputs就是经过softmax后，各个动作被选择到的概率
         masked_policies[avail_actions == 0] = 0
         masked_policies = masked_policies / (
             masked_policies.sum(-1, keepdim=True) + 1e-8
         )
-
+        
         if test_mode and self.test_greedy:
             picked_actions = masked_policies.max(dim=2)[1]
         else:
             self.epsilon = self.schedule.eval(t_env)
-
+            # 按照当前的epsilon值，重新给各个动作赋予概率，然后进行采样
             epsilon_action_num = avail_actions.sum(-1, keepdim=True) + 1e-8
-            masked_policies = (
+            masked_policies = (# 将原来的概率乘以1- epsilon，然后将epsilon的概率平均分配到各个动作上，再加起来
                 1 - self.epsilon
             ) * masked_policies + avail_actions * self.epsilon / epsilon_action_num
             masked_policies[avail_actions == 0] = 0

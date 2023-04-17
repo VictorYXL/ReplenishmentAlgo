@@ -25,6 +25,7 @@ class TimeLimit(GymTimeLimit):
         observation, reward, done, info = self.env.step(action)
         self._elapsed_steps += 1
         if self._elapsed_steps >= self._max_episode_steps:
+            # 这里的observation不是一个一维的，而是一个二维的，其中第一纬表示warehouse的数目。这里就是说让全部warehouse的done都置为true
             info["TimeLimit.truncated"] = not done
             done = len(observation) * [True]
         return observation, reward, done, info
@@ -89,18 +90,18 @@ class ReplenishmentEnv(MultiAgentEnv):
         sampler_seq_len = env_base.config['env']['horizon']
         self.episode_limit = min(time_limit, sampler_seq_len)
         env_base.reset()
-
+        # 如果step超过sampler_seq_len的时间后，那么就会强行截断，全部的done都置为true
         self._env = TimeLimit(
             env_base,
             max_episode_steps = sampler_seq_len,
         )
         self._env = FlattenObservation(self._env)
-
+        self.n_warehouses = self._env.n_warehouses
         self.n_agents = self._env.get_agent_count()
         self._obs = None
 
         self.longest_action_space = max(self._env.action_space, key=lambda x: x.n)
-        self.longest_observation_space = max(
+        self.longest_observation_space = max( # TODO:这里深入到ReplenishmentEnv中去更改obs的长度了，使其加上了level的onehot码
             self._env.observation_space, key=lambda x: x.shape
         )
 
@@ -112,6 +113,7 @@ class ReplenishmentEnv(MultiAgentEnv):
         """Returns reward, terminated, info"""
         actions = [int(a) for a in actions]
         self._obs, reward, done, info = self._env.step(actions)
+        # 对于obs填充0，使其达到固定的长度。在array的前面填充0个0，后面填充self.longest_observation_space.shape[0] - len(o))个0
         self._obs = [
             np.pad(
                 o,
@@ -125,6 +127,7 @@ class ReplenishmentEnv(MultiAgentEnv):
             float(sum(reward))/1e4,
             done, 
             {
+                # TODO:这两个individual rewards不是一样的吗？
                 "individual_rewards": np.array(reward).astype(np.float32)/1e4
                 if self.n_agents > 1
                 else np.array([reward,]).astype(np.float32)/1e4,
@@ -217,9 +220,13 @@ class ReplenishmentEnv(MultiAgentEnv):
         return {}
 
     def switch_mode(self, mode):
+        # 函数的实现在哪？
         self._env.switch_mode(mode)
 
     def get_profit(self):
+        # 此处将(3,num_sku)的数组，利用np.flatten拉平成（3*num_sku）的数组。数组的[0,num_sku-1]之和就是第一个商店的profit,[num_sku,2*num_sku-1]就是第二个商店的profit
+        # 定义在哪？？在replenishment_env的repository中有定义，但是在这里有定义吗？
+        # per_balance就是每个智能体得到的利润，和智能体的数目一样长
         profit = self._env.per_balance.copy()
         return profit
 

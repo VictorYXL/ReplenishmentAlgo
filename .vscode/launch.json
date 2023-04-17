@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "main",
+            "type": "python",
+            "request": "launch",
+            "program": "src/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": ["--config=mappo_tr_0","--env-config=replenishment","--loglevel=INFO","runner=parallel","batch_size_run=10"]
+        }
+    ]
+}

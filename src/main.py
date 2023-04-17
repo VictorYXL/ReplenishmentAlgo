@@ -130,8 +130,9 @@ if __name__ == "__main__":
 
     logger.info("Saving to FileStorageObserver in {}.".format(file_obs_path))
     ex.observers.append(FileStorageObserver.create(file_obs_path))
-
+    # TODO: 只是用于调试
     ex.run_commandline(params)
+    #ex.run()
 
     # flush
     sys.stdout.flush()

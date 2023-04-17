@@ -48,6 +48,8 @@ use_orthogonal: True
 gain: 0.01
 use_value_norm: True
 use_zero_like_context: True
+# 开启use_individual_rewards后，会屏蔽掉use_mean_team_reward
+# 只有在parallel_runner中才定义了individual_reward
 use_individual_rewards: True
 use_mean_team_reward: True
 

@@ -37,7 +37,9 @@ class LocalPPOLearner:
 
     def train(self, batch: EpisodeBatch, t_env: int, episode_num: int):
         # Get the relevant quantities
+        # 如果每个人都有一个独立的reward，那么就是individual reward；如果只有一个共用的reward，那么所有agent的reward都是它
         if self.args.use_individual_rewards:
+            #TODO:如果是episode runner那怎么得到individual reward？
             rewards = batch["individual_rewards"][:, :-1].to(batch.device)
         else:
             rewards = (
@@ -61,6 +63,7 @@ class LocalPPOLearner:
 
         # targets and advantages
         with torch.no_grad():
+            # 如果critic包含rnn，那么需要加入隐状态
             if "rnn" in self.args.critic_type:
                 old_values = []
                 self.critic.init_hidden(batch.batch_size)
